@@ -19,3 +19,8 @@ Enable GitHub Pages from repository Settings → Pages → Deploy from branch ma
 
 ## Security
 Do not use this demo for confidential files until you review the deployed code and third-party CDN dependencies. Local processing is intended for supported operations. No authentication backend exists in this starter.
+
+
+## Updated tools status
+- Fixed script handler and added crop-box trimming.
+- Password protection, OCR, full Office conversion, and account login still require further integrations.
