@@ -24,3 +24,5 @@ Do not use this demo for confidential files until you review the deployed code a
 ## Updated tools status
 - Fixed script handler and added crop-box trimming.
 - Password protection, OCR, full Office conversion, and account login still require further integrations.
+
+- Reorder pages with a validated custom page sequence (all pages must be included exactly once).
