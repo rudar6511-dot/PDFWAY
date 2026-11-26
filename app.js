@@ -48,3 +48,18 @@ else if(fn==='crop'){doc=await load(f);const margin=24;doc.getPages().forEach(p=
 else throw Error('This tool is not available yet.');
 out.textContent='Done! Your download should begin shortly.';}catch(err){out.textContent='Could not process: '+err.message}}
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();document.getElementById('searchTools').focus()}if(e.key==='Escape'){modal.classList.remove('show');toolBack.classList.remove('show')}});
+
+
+/* PDFWay PWA: install prompt + service worker */
+(()=>{
+  const installButton=document.getElementById('installBtn');
+  let installPrompt=null;
+  const standalone=()=>window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
+  function refreshInstallButton(){if(installButton)installButton.hidden=standalone()||!installPrompt;}
+  window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;refreshInstallButton();});
+  window.addEventListener('appinstalled',()=>{installPrompt=null;refreshInstallButton();});
+  if(installButton){installButton.addEventListener('click',async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;refreshInstallButton();});refreshInstallButton();}
+  if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){
+    window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js',{scope:'./'}).catch(err=>console.warn('PDFWay offline setup unavailable:',err)));
+  }
+})();
