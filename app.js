@@ -50,16 +50,67 @@ out.textContent='Done! Your download should begin shortly.';}catch(err){out.text
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();document.getElementById('searchTools').focus()}if(e.key==='Escape'){modal.classList.remove('show');toolBack.classList.remove('show')}});
 
 
-/* PDFWay PWA: install prompt + service worker */
+/* PDFWay PWA: install prompt, connection status and user-controlled updates */
 (()=>{
   const installButton=document.getElementById('installBtn');
+  const status=document.getElementById('pwaStatus');
+  const updateBanner=document.getElementById('pwaUpdateBanner');
+  const updateButton=document.getElementById('pwaUpdateBtn');
+  const dismissButton=document.getElementById('pwaUpdateDismiss');
   let installPrompt=null;
+  let registration=null;
+  let applyUpdate=false;
+  let refreshing=false;
   const standalone=()=>window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
   function refreshInstallButton(){if(installButton)installButton.hidden=standalone()||!installPrompt;}
+  function refreshConnectionStatus(){
+    if(!status)return;
+    const online=navigator.onLine;
+    status.textContent=online?'● Online · Ready':'● Offline · Cached app only; some tools need internet';
+    status.classList.toggle('is-offline',!online);
+  }
+  function showUpdate(){if(updateBanner)updateBanner.hidden=false;}
   window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;refreshInstallButton();});
   window.addEventListener('appinstalled',()=>{installPrompt=null;refreshInstallButton();});
-  if(installButton){installButton.addEventListener('click',async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;refreshInstallButton();});refreshInstallButton();}
-  if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){
-    window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js',{scope:'./'}).catch(err=>console.warn('PDFWay offline setup unavailable:',err)));
+  if(installButton){
+    installButton.addEventListener('click',async()=>{
+      if(!installPrompt)return;
+      installPrompt.prompt();
+      await installPrompt.userChoice;
+      installPrompt=null;
+      refreshInstallButton();
+    });
+    refreshInstallButton();
+  }
+  refreshConnectionStatus();
+  window.addEventListener('online',refreshConnectionStatus);
+  window.addEventListener('offline',refreshConnectionStatus);
+  if(dismissButton)dismissButton.addEventListener('click',()=>{if(updateBanner)updateBanner.hidden=true;});
+  if(updateButton)updateButton.addEventListener('click',()=>{
+    if(!registration||!registration.waiting)return;
+    applyUpdate=true;
+    registration.waiting.postMessage({type:'SKIP_WAITING'});
+  });
+  if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')){
+    window.addEventListener('load',async()=>{
+      try{
+        registration=await navigator.serviceWorker.register('./sw.js',{scope:'./'});
+        if(registration.waiting&&navigator.serviceWorker.controller)showUpdate();
+        registration.addEventListener('updatefound',()=>{
+          const worker=registration.installing;
+          if(!worker)return;
+          worker.addEventListener('statechange',()=>{
+            if(worker.state==='installed'&&navigator.serviceWorker.controller)showUpdate();
+          });
+        });
+        navigator.serviceWorker.addEventListener('controllerchange',()=>{
+          if(applyUpdate&&!refreshing){refreshing=true;window.location.reload();}
+        });
+        window.addEventListener('online',()=>registration.update().catch(()=>{}));
+        document.addEventListener('visibilitychange',()=>{
+          if(document.visibilityState==='visible')registration.update().catch(()=>{});
+        });
+      }catch(err){console.warn('PDFWay offline setup unavailable:',err);}
+    });
   }
 })();
