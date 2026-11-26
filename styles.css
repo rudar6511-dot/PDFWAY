@@ -38,3 +38,7 @@
 .tool-modal .preview-actions .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
 @media(max-width:520px){.tool-modal .preview-stage{padding:16px 9px}.tool-modal .preview-toolbar{align-items:flex-start}.tool-modal .preview-status{width:100%;margin-left:0}}
 @media(prefers-reduced-motion:reduce){.tool-modal .preview-page.turn-next,.tool-modal .preview-page.turn-prev,.tool-modal .preview-page.turn-next:after,.tool-modal .preview-page.turn-prev:after{animation:none}}
+
+/* PWA install control */
+#installBtn[hidden]{display:none!important}
+@media(max-width:650px){.top-actions #installBtn{display:inline-flex;padding:9px 11px;font-size:12px}}
