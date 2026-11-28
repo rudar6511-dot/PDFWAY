@@ -82,3 +82,14 @@
   .annotation-footer>div{width:100%}
   .annotation-footer .btn{flex:1}
 }
+
+
+/* Signature pad and image-stamp controls */
+.signature-panel{display:grid;gap:10px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.signature-panel strong{font-size:13px}
+.signature-panel p{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.5}
+.signature-panel canvas{display:block;width:100%;height:auto;margin:0!important;border:1px dashed #8b96b8!important;border-radius:10px;background-color:#fff;background-image:linear-gradient(90deg,#edf0f5 1px,transparent 1px),linear-gradient(#edf0f5 1px,transparent 1px);background-size:20px 20px;touch-action:none;cursor:crosshair}
+.signature-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.signature-actions .btn{margin:0}
+.annotation-toolbar input[type=file]{width:min(220px,100%);font-size:11px}
+@media(max-width:560px){.signature-panel{padding:11px}.signature-actions{display:grid;grid-template-columns:1fr 1fr}.signature-actions .btn{width:100%}.annotation-toolbar input[type=file]{width:100%}}
