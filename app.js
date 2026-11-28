@@ -102,6 +102,9 @@ async function launchAnnotationEditor(file,out){
   const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
   const annotations=[];
   let pageNumber=1,mode='text',viewport=null,active=null;
+  let stampImage=null,stampData=null,stampKind='image';
+  let signatureDrawing=false,signatureHasInk=false;
+  const imageCache=new Map();
   out.innerHTML=
     '<div class="annotation-editor">'+
       '<div class="annotation-toolbar">'+
@@ -112,8 +115,14 @@ async function launchAnnotationEditor(file,out){
         '<label>Text <input id="annText" type="text" maxlength="240" placeholder="Type a note"></label>'+
         '<label>Color <input id="annColor" type="color" value="#ffca55"></label>'+
         '<label>Size <input id="annSize" type="number" min="8" max="72" value="22"></label>'+
+        '<label>Image stamp <input id="annImage" type="file" accept="image/png,image/jpeg,image/webp"></label>'+
       '</div>'+
-      '<p class="annotation-help">Text: type a note and click on the page. Highlight: drag over an area. Draw: drag to write or mark. Use Undo to remove the last mark.</p>'+
+      '<section class="signature-panel" aria-label="Signature pad">'+
+        '<div><strong>Signature pad</strong><p>Draw your handwritten signature, then choose Use signature and click on the PDF page to place it.</p></div>'+
+        '<canvas id="annSignaturePad" width="600" height="170" aria-label="Draw signature here"></canvas>'+
+        '<div class="signature-actions"><button class="btn glass" id="annSignatureClear" type="button">Clear pad</button><button class="btn primary" id="annSignatureUse" type="button">Use signature</button></div>'+
+      '</section>'+
+      '<p class="annotation-help">Text: click to place. Highlight and Draw: drag on the page. Image stamp or signature: choose it, then click the page. Use Undo to remove the last mark.</p>'+
       '<div class="annotation-stage" id="annStage"><canvas id="annPageCanvas"></canvas><canvas id="annOverlay" aria-label="PDF annotation surface"></canvas></div>'+
       '<div class="annotation-footer"><span id="annStatus" aria-live="polite">Page 1 of '+pdf.numPages+'</span><div><button class="btn glass" id="annUndo" type="button">Undo</button><button class="btn glass" id="annClear" type="button">Clear this page</button><button class="btn primary" id="annSave" type="button">Download annotated PDF</button></div></div>'+
       '<p class="annotation-note">Annotations are added as a transparent overlay. Existing PDF text remains intact. The selected file is processed in this browser; only the final download is created.</p>'+
@@ -125,6 +134,9 @@ async function launchAnnotationEditor(file,out){
   const textInput=out.querySelector('#annText');
   const colorInput=out.querySelector('#annColor');
   const sizeInput=out.querySelector('#annSize');
+  const imageInput=out.querySelector('#annImage');
+  const signaturePad=out.querySelector('#annSignaturePad');
+  const signatureCtx=signaturePad.getContext('2d');
   const pageCanvas=out.querySelector('#annPageCanvas');
   const overlay=out.querySelector('#annOverlay');
   const stage=out.querySelector('#annStage');
@@ -134,6 +146,24 @@ async function launchAnnotationEditor(file,out){
   const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
   function color(){return colorInput.value||'#ffca55';}
   function size(){return clamp(Number(sizeInput.value)||22,8,72);}
+  function cacheImage(data){
+    let image=imageCache.get(data);
+    if(image)return image;
+    image=new Image();
+    imageCache.set(data,image);
+    image.onload=()=>redrawOverlay();
+    image.src=data;
+    return image;
+  }
+  async function ensureImage(data){
+    const image=cacheImage(data);
+    if(image.complete&&image.naturalWidth)return image;
+    await new Promise((resolve,reject)=>{
+      image.onload=resolve;
+      image.onerror=()=>reject(Error('Could not read the selected image.'));
+    });
+    return image;
+  }
   function point(event){
     const rect=overlay.getBoundingClientRect();
     return {
@@ -154,6 +184,14 @@ async function launchAnnotationEditor(file,out){
       context.fillStyle=item.color;
       context.globalAlpha=.30;
       context.fillRect(item.x*width,item.y*height,item.w*width,item.h*height);
+    }else if(item.type==='image'||item.type==='signature'){
+      const image=imageCache.get(item.data);
+      if(image&&image.complete&&image.naturalWidth){
+        const drawWidth=item.w*width;
+        const drawHeight=drawWidth*image.naturalHeight/image.naturalWidth;
+        context.globalAlpha=1;
+        context.drawImage(image,item.x*width,item.y*height,drawWidth,drawHeight);
+      }
     }else if(item.type==='draw'){
       if(item.points.length>1){
         context.strokeStyle=item.color;
@@ -205,11 +243,88 @@ async function launchAnnotationEditor(file,out){
   pageInput.addEventListener('change',()=>changePage(pageInput.value));
   prev.addEventListener('click',()=>changePage(pageNumber-1));
   next.addEventListener('click',()=>changePage(pageNumber+1));
-  modeInput.addEventListener('change',()=>{mode=modeInput.value;overlay.style.cursor=mode==='text'?'text':'crosshair';});
+  modeInput.insertAdjacentHTML('beforeend','<option value="image">Place image / signature</option>');
+  modeInput.addEventListener('change',()=>{mode=modeInput.value;overlay.style.cursor=mode==='text'?'text':mode==='image'?'copy':'crosshair';});
+  function padPoint(event){
+    const rect=signaturePad.getBoundingClientRect();
+    return {x:(event.clientX-rect.left)*signaturePad.width/rect.width,y:(event.clientY-rect.top)*signaturePad.height/rect.height};
+  }
+  signaturePad.addEventListener('pointerdown',event=>{
+    signatureDrawing=true;
+    signatureHasInk=true;
+    signaturePad.setPointerCapture(event.pointerId);
+    const p=padPoint(event);
+    signatureCtx.beginPath();
+    signatureCtx.moveTo(p.x,p.y);
+    signatureCtx.strokeStyle=color();
+    signatureCtx.lineWidth=clamp(size()/7,2,8);
+    signatureCtx.lineCap='round';
+    signatureCtx.lineJoin='round';
+  });
+  signaturePad.addEventListener('pointermove',event=>{
+    if(!signatureDrawing)return;
+    const p=padPoint(event);
+    signatureCtx.lineTo(p.x,p.y);
+    signatureCtx.stroke();
+  });
+  const finishSignature=()=>{signatureDrawing=false;};
+  signaturePad.addEventListener('pointerup',finishSignature);
+  signaturePad.addEventListener('pointercancel',finishSignature);
+  out.querySelector('#annSignatureClear').addEventListener('click',()=>{
+    signatureCtx.clearRect(0,0,signaturePad.width,signaturePad.height);
+    signatureHasInk=false;
+    status.textContent='Signature pad cleared.';
+  });
+  out.querySelector('#annSignatureUse').addEventListener('click',()=>{
+    if(!signatureHasInk){status.textContent='Draw your signature in the pad first.';return;}
+    stampData=signaturePad.toDataURL('image/png');
+    stampImage=cacheImage(stampData);
+    stampKind='signature';
+    modeInput.value='image';
+    mode='image';
+    overlay.style.cursor='copy';
+    status.textContent='Signature ready. Click on the PDF page to place it.';
+  });
+  imageInput.addEventListener('change',()=>{
+    const file=imageInput.files&&imageInput.files[0];
+    if(!file)return;
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type)){
+      status.textContent='Choose a PNG, JPG or WebP image.';
+      imageInput.value='';
+      return;
+    }
+    const reader=new FileReader();
+    reader.onload=()=>{
+      stampData=String(reader.result);
+      stampImage=cacheImage(stampData);
+      stampKind='image';
+      modeInput.value='image';
+      mode='image';
+      overlay.style.cursor='copy';
+      status.textContent='Image ready. Click on the PDF page to place it.';
+    };
+    reader.onerror=()=>{status.textContent='Could not read that image file.';};
+    reader.readAsDataURL(file);
+  });
   overlay.addEventListener('pointerdown',event=>{
     if(event.button!==undefined&&event.button!==0)return;
     const p=point(event);
     mode=modeInput.value;
+    if(mode==='image'){
+      if(!stampImage||!stampData||!stampImage.complete||!stampImage.naturalWidth){
+        status.textContent='Choose an image or create a signature first.';
+        return;
+      }
+      const widthPct=Math.min(.48,Math.max(.08,size()/100));
+      const aspect=stampImage.naturalWidth/stampImage.naturalHeight;
+      const drawHeight=(widthPct*overlay.width/aspect)/overlay.height;
+      const x=clamp(p.x,0,Math.max(0,1-widthPct));
+      const y=clamp(p.y,0,Math.max(0,1-drawHeight));
+      annotations.push({type:stampKind,page:pageNumber,x,y,w:widthPct,data:stampData});
+      redrawOverlay();
+      status.textContent=(stampKind==='signature'?'Signature':'Image stamp')+' placed. You can move to another page or add another.';
+      return;
+    }
     if(mode==='text'){
       const value=textInput.value.trim();
       if(!value){status.textContent='Type your note first, then click on the page.';return;}
@@ -272,6 +387,9 @@ async function launchAnnotationEditor(file,out){
       const {PDFDocument}=PDFLib;
       const output=await PDFDocument.load(await file.arrayBuffer());
       const pages=output.getPages();
+      for(const item of annotations){
+        if(item.type==='image'||item.type==='signature')await ensureImage(item.data);
+      }
       const exportScale=2;
       for(let index=0;index<pages.length;index++){
         const pageItems=annotations.filter(item=>item.page===index+1);
