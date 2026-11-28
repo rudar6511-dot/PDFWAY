@@ -256,7 +256,7 @@ async function launchAnnotationEditor(file,out){
     const p=padPoint(event);
     signatureCtx.beginPath();
     signatureCtx.moveTo(p.x,p.y);
-    signatureCtx.strokeStyle=color();
+    signatureCtx.strokeStyle=color()==='#ffca55'?'#17233b':color();
     signatureCtx.lineWidth=clamp(size()/7,2,8);
     signatureCtx.lineCap='round';
     signatureCtx.lineJoin='round';
@@ -283,7 +283,8 @@ async function launchAnnotationEditor(file,out){
     modeInput.value='image';
     mode='image';
     overlay.style.cursor='copy';
-    status.textContent='Signature ready. Click on the PDF page to place it.';
+    status.textContent=stampImage.complete&&stampImage.naturalWidth?'Signature ready. Click on the PDF page to place it.':'Loading signature…';
+    if(!stampImage.complete||!stampImage.naturalWidth)stampImage.addEventListener('load',()=>{status.textContent='Signature ready. Click on the PDF page to place it.';},{once:true});
   });
   imageInput.addEventListener('change',()=>{
     const file=imageInput.files&&imageInput.files[0];
@@ -301,7 +302,8 @@ async function launchAnnotationEditor(file,out){
       modeInput.value='image';
       mode='image';
       overlay.style.cursor='copy';
-      status.textContent='Image ready. Click on the PDF page to place it.';
+      status.textContent=stampImage.complete&&stampImage.naturalWidth?'Image ready. Click on the PDF page to place it.':'Loading image…';
+      if(!stampImage.complete||!stampImage.naturalWidth)stampImage.addEventListener('load',()=>{status.textContent='Image ready. Click on the PDF page to place it.';},{once:true});
     };
     reader.onerror=()=>{status.textContent='Could not read that image file.';};
     reader.readAsDataURL(file);
